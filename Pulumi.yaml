@@ -1,0 +1,3 @@
+name: iac
+runtime: java
+description: A minimal AWS Java Pulumi program
