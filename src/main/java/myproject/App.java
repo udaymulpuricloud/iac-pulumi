@@ -23,7 +23,8 @@ public class App {
             var config =  ctx.config();
             String vpcname="devvpc";
             String vpccidr= config.require("vpcCidr");
-            String region=config.require("aws-region");
+//            var awsRegion=AwsFunctions.getRegion();
+//            ctx.export("regionName",awsRegion.applyValue(getRegionResult -> getRegionResult.name()));
 
 
             Vpc newvpc= new Vpc(vpcname,new VpcArgs.Builder()
@@ -49,13 +50,14 @@ public class App {
                 avaiilable.names();
                 List<String> availablelist = avaiilable.names();
                 int size=availablelist.size();
-                Subnet[] publicsubnet=new Subnet[3];
-                for(int i=0;i<3;i++){
-                    String publicSubnetCIDR = "10.0." + (i * 10) + ".0/24";
+                int numSubnets = Math.min(3,size);
+                Subnet[] publicsubnet=new Subnet[numSubnets];
+                for(int i=0;i<numSubnets;i++){
+                    String publicSubnetCIDR = calculateSubnetCIDR(vpccidr, i,true);
                     publicsubnet[i]=new Subnet("publicsubnet"+i,new SubnetArgs.Builder()
                             .vpcId(newvpc.id())
                             .mapPublicIpOnLaunch(true)
-                            .availabilityZone(availablelist.get(i%size))
+                            .availabilityZone(availablelist.get(i))
                             .cidrBlock(publicSubnetCIDR)
                             .tags(Map.of("Name",vpcname+"-publisubnet"+i))
                             .build());
@@ -66,9 +68,9 @@ public class App {
                             .build()
                            );
                 }
-                Subnet[] privatesubnet=new Subnet[3];
-                for(int i=0;i<3;i++){
-                    String privateSubnetCIDR = "10.0." + (i * 10+5) + ".0/24";
+                Subnet[] privatesubnet=new Subnet[numSubnets];
+                for(int i=0;i<numSubnets;i++){
+                    String privateSubnetCIDR = calculateSubnetCIDR(vpccidr,i,false);
                     privatesubnet[i]=new Subnet("privatesubnet"+i,new SubnetArgs.Builder()
                             .vpcId(newvpc.id())
                             .availabilityZone(availablelist.get(i%size))
@@ -84,10 +86,24 @@ public class App {
                 return null;
             });
 
+        }
 
-
-
-        });
+        );
 
     }
+    public static String calculateSubnetCIDR(String vpccidr, int subnetIndex, boolean isPublic) {
+        String[] vpcCidrParts = vpccidr.split("\\.");
+        int newThirdOctet;
+
+        if (isPublic) {
+            newThirdOctet = Integer.parseInt(vpcCidrParts[2]) + subnetIndex;
+        } else {
+            newThirdOctet = Integer.parseInt(vpcCidrParts[2]) + subnetIndex + 10;
+        }
+
+        return String.format("%s.%s.%s.0/24", vpcCidrParts[0], vpcCidrParts[1], newThirdOctet);
+    }
+
+
+
 }
