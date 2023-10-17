@@ -1,4 +1,12 @@
+encryptionsalt: v1:VBaIekCN0/o=:v1:nY4gdchICMbQhJ5N:fI3RsI895DxmJHOwfV3vumE7QsAClQ==
 config:
   aws:profile: dev
-  aws:region: us-west-1
-  iac:vpcCidr: 10.0.0.0/16
+  aws:region: us-east-1
+
+  iac:data:
+    vpcCidr: 10.0.0.0/16
+    ports: [22,80,443]
+    volume: 25
+    KeyName : "newtest"
+    AmiId : "ami-0dfd0fd5d70a55063"
+
