@@ -105,7 +105,7 @@ public class App {
                                 Instance instance= new Instance("devec2",new InstanceArgs.Builder()
                                         .ami(data.get("AmiId").toString())
                                         .instanceType("t2.micro")
-                                        .keyName(data.get("keyName").toString())
+                                        .keyName(data.get("Keyname").toString())
                                         .ebsBlockDevices(InstanceEbsBlockDeviceArgs.builder()
                                                 .deviceName("/dev/xvda")
                                                 .volumeType("gp2")
@@ -115,6 +115,7 @@ public class App {
                                         .vpcSecurityGroupIds(securityGroup.id().applyValue(Collections::singletonList))
                                         .subnetId(publicsubnet[0].id())
                                         .disableApiTermination(false)
+                                        .tags(Map.of("Name","ec2dev"))
                                         .build());
                         return null;
 
