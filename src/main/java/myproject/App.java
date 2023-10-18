@@ -6,14 +6,14 @@ import com.pulumi.Pulumi;
 import com.pulumi.aws.AwsFunctions;
 import com.pulumi.aws.ec2.*;
 
-import com.pulumi.aws.ec2.inputs.InstanceEbsBlockDeviceArgs;
-import com.pulumi.aws.ec2.inputs.RouteTableRouteArgs;
-import com.pulumi.aws.ec2.inputs.SecurityGroupIngressArgs;
+import com.pulumi.aws.ec2.inputs.*;
+import com.pulumi.aws.ec2.outputs.GetAmiResult;
 import com.pulumi.aws.inputs.GetAvailabilityZonesArgs;
 import com.pulumi.aws.outputs.GetAvailabilityZoneResult;
 
 import com.pulumi.core.Output;
 import com.pulumi.aws.s3.Bucket;
+import jdk.jshell.Snippet;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -46,7 +46,7 @@ public class App {
                             .build());
 
             List<Double> allowedPorts = (List<Double>) data.get("ports");
-            SecurityGroup securityGroup = new SecurityGroup("securityGroup", new SecurityGroupArgs.Builder()
+            SecurityGroup application_security_group = new SecurityGroup("application_security_group", new SecurityGroupArgs.Builder()
                             .vpcId(newvpc.id())
                             .tags(Map.of("Name:", "AMISecurityGroup"))
                             .build());
@@ -57,7 +57,7 @@ public class App {
                                 .fromPort(port.intValue())
                                 .toPort(port.intValue())
                                 .protocol("tcp")
-                                .securityGroupId(securityGroup.id())
+                                .securityGroupId(application_security_group.id())
                                 .cidrBlocks(Collections.singletonList("0.0.0.0/0"))
                                 .build());
                     }
@@ -101,6 +101,23 @@ public class App {
                                     .build()
                             );
                         }
+
+//                        Output<GetAmiResult> debianami =  Ec2Functions.getAmi(new GetAmiArgs.Builder()
+//                                        .filters(new GetAmiFilterArgs.Builder()
+//                                                .name("csye6225_*")
+//                                                .
+//                                                .build())
+//                                        .build());
+//                               final var debianAmi = Ec2Functions.getAmi(new GetAmiArgs.Builder()
+//                                       .filters(Arrays.asList(
+//                                               new GetAmiFilterArgs.Builder().name("name").values("csye6225_*").build(),
+//                                               new GetAmiFilterArgs.Builder().name("description").values("*Debian*").build()))
+//                                       .mostRecent(true)
+//                                       .owners(data.get("owner_id").toString())
+//                                       .build());
+
+//                                Output<String> debianAmiId = debianAmi.apply();
+
                         Double volume = (Double) data.get("volume");
                                 Instance instance= new Instance("devec2",new InstanceArgs.Builder()
                                         .ami(data.get("AmiId").toString())
@@ -112,7 +129,7 @@ public class App {
                                                 .volumeSize(volume.intValue())
                                                 .deleteOnTermination(true)
                                                 .build())
-                                        .vpcSecurityGroupIds(securityGroup.id().applyValue(Collections::singletonList))
+                                        .vpcSecurityGroupIds(application_security_group.id().applyValue(Collections::singletonList))
                                         .subnetId(publicsubnet[0].id())
                                         .disableApiTermination(false)
                                         .tags(Map.of("Name","ec2dev"))
@@ -125,6 +142,8 @@ public class App {
         );
 
     }
+
+
 
     public static String calculateSubnetCIDR(String vpccidr, int subnetIndex, boolean isPublic) {
         String[] vpcCidrParts = vpccidr.split("\\.");
