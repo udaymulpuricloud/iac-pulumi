@@ -88,7 +88,7 @@ public class App {
                            .sourceSecurityGroupId(application_security_group.id())
                            .securityGroupId(ec2_security_group.id())
                            .build());
-                   SecurityGroupRule egressRule = new SecurityGroupRule("egressRule", new SecurityGroupRuleArgs.Builder()
+                   SecurityGroupRule egressRule = new SecurityGroupRule("egressRule"+ports, new SecurityGroupRuleArgs.Builder()
                            .type("egress")
                            .fromPort(ports.intValue())
                            .toPort(ports.intValue())
@@ -155,7 +155,52 @@ public class App {
 
 //                                Output<String> debianAmiId = debianAmi.apply();
 
-                        Double volume = (Double) data.get("volume");
+
+                                List<Output<String>> subnetIds = new ArrayList<>();
+                                for (Subnet subnet : privatesubnet) {
+                                    subnetIds.add(subnet.id());
+                                }
+                                Output<List<String>> subnetIdsOutput = Output.all(subnetIds).applyValue(ids -> ids);
+
+                                SubnetGroup privatesubnetGroup = new SubnetGroup("privatesubnetgroup", SubnetGroupArgs.builder()
+                                        .subnetIds(subnetIdsOutput)
+                                        .build());
+
+
+                                Double dbvolume = (Double) data.get("db_volume");
+                                Double portnum = (Double) data.get("db_volume");
+                               com.pulumi.aws.rds.Instance rdsDbInstance = new com.pulumi.aws.rds.Instance("csye6225", new com.pulumi.aws.rds.InstanceArgs.Builder()
+                                        .engine(data.get("db_engine").toString())
+                                        .instanceClass("db.t3.micro")
+                                        .multiAz(false)
+                                       .allocatedStorage(dbvolume.intValue())
+                                       .dbName(data.get("db_name").toString())
+                                       .username(data.get("db_username").toString())
+                                       .password(data.get("db_password").toString())
+                                       .vpcSecurityGroupIds(ec2_security_group.id().applyValue(Collections::singletonList))
+                                       .dbSubnetGroupName(privatesubnetGroup.name())
+                                       .port(portnum.intValue())
+                                       .publiclyAccessible(false)
+                                       .skipFinalSnapshot(true)
+                                        .build());
+
+                                String username = data.get("db_username").toString();
+                                String password = data.get("db_password").toString();
+
+                                Output<String> userDataScript =rdsDbInstance.address().applyValue(v -> String.format(
+                                        "#!/bin/bash\n" +
+                                                "echo 'export DB_USER=%s' >> /etc/environment\n" +
+                                                "echo 'export DB_PASSWORD=%s' >> /etc/environment\n" +
+                                                "echo 'export LOCALHOST=%s' >> /etc/environment\n" +
+                                                "echo 'export PORT=%s' >> /etc/environment\n"+
+                                                "echo 'export DB =%s' >> /etc/environment\n"+
+
+                                        username, password,v,portnum.intValue() ,data.get("db_name").toString()
+                                ));
+
+
+
+                                Double volume = (Double) data.get("volume");
                                 Instance instance= new Instance("devec2",new InstanceArgs.Builder()
                                         .ami(data.get("AmiId").toString())
                                         .instanceType("t2.micro")
@@ -170,35 +215,11 @@ public class App {
                                         .subnetId(publicsubnet[0].id())
                                         .disableApiTermination(false)
                                         .tags(Map.of("Name","ec2dev"))
-                                        .build());
-
-                                List<Output<String>> subnetIds = new ArrayList<>();
-                                for (Subnet subnet : privatesubnet) {
-                                    subnetIds.add(subnet.id());
-                                }
-                                Output<List<String>> subnetIdsOutput = Output.all(subnetIds).applyValue(ids -> ids);
-
-                                SubnetGroup privatesubnetGroup = new SubnetGroup("privatesubnetgroup", SubnetGroupArgs.builder()
-                                        .subnetIds(subnetIdsOutput)
+                                        .userData(userDataScript)
                                         .build());
 
 
-                                Double dbvolume = (Double) data.get("db_volume");
-                               com.pulumi.aws.rds.Instance rdsDbInstance = new com.pulumi.aws.rds.Instance("csye6225", new com.pulumi.aws.rds.InstanceArgs.Builder()
-                                        .engine(data.get("db_engine").toString())
-                                        .instanceClass("db.t3.micro")
-                                        .multiAz(false)
-                                       .allocatedStorage(dbvolume.intValue())
-                                       .dbName(data.get("db_name").toString())
-                                       .username(data.get("db_username").toString())
-                                       .password(data.get("db_password").toString())
-                                       .vpcSecurityGroupIds(ec2_security_group.id().applyValue(Collections::singletonList))
-                                       .dbSubnetGroupName(privatesubnetGroup.name())
-                                       .publiclyAccessible(false)
-                                       .skipFinalSnapshot(true)
-                                        .build());
-
-                        return null;
+                                return null;
 
                     }
                     );
