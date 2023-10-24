@@ -16,6 +16,7 @@ config:
     db_name : "csye6225"
     db_username : "postgres"
     db_password : "UdaR9603"
+    port : 5432
 
 
 
