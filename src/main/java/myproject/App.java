@@ -9,8 +9,14 @@ import com.pulumi.aws.ec2.*;
 import com.pulumi.aws.ec2.inputs.*;
 import com.pulumi.aws.ec2.outputs.GetAmiResult;
 import com.pulumi.aws.inputs.GetAvailabilityZonesArgs;
+
 import com.pulumi.aws.outputs.GetAvailabilityZoneResult;
 
+import com.pulumi.aws.rds.ParameterGroup;
+import com.pulumi.aws.rds.ParameterGroupArgs;
+import com.pulumi.aws.rds.SubnetGroup;
+import com.pulumi.aws.rds.SubnetGroupArgs;
+import com.pulumi.aws.rds.inputs.ParameterGroupParameterArgs;
 import com.pulumi.core.Output;
 import com.pulumi.aws.s3.Bucket;
 import jdk.jshell.Snippet;
@@ -44,11 +50,18 @@ public class App {
                             .vpcId(newvpc.id())
                             .tags(Map.of("Name", vpcname + "-privateroutetable"))
                             .build());
+                    ParameterGroup parameterGroup = new ParameterGroup("postgrespg",new ParameterGroupArgs.Builder()
+                            .family("postgres14")
+//                            .parameters(ParameterGroupParameterArgs.builder()
+//                                    .name("postgrespg")
+//                                    .build())
+                            .tags(Map.of("Name","postgrespg"))
+                            .build());
 
-            List<Double> allowedPorts = (List<Double>) data.get("ports");
+            List<Double> allowedPorts = (List<Double>) data.get("portsforec2");
             SecurityGroup application_security_group = new SecurityGroup("application_security_group", new SecurityGroupArgs.Builder()
                             .vpcId(newvpc.id())
-                            .tags(Map.of("Name:", "AMISecurityGroup"))
+                            .tags(Map.of("Name", "AMISecurityGroup"))
                             .build());
 
                     for (Double port : allowedPorts) {
@@ -61,6 +74,30 @@ public class App {
                                 .cidrBlocks(Collections.singletonList("0.0.0.0/0"))
                                 .build());
                     }
+            List<Double> allowedPortsforrds=(List<Double>)data.get("portsforrds");
+            SecurityGroup ec2_security_group =new SecurityGroup("ec2_security_group",new SecurityGroupArgs.Builder()
+                    .vpcId(newvpc.id())
+                    .tags(Map.of("Name","databasesecuritygroup"))
+                    .build());
+               for(Double ports:allowedPortsforrds){
+                   SecurityGroupRule rules=new SecurityGroupRule("ingressRule-"+ports,new SecurityGroupRuleArgs.Builder()
+                           .type("ingress")
+                           .fromPort(ports.intValue())
+                           .toPort(ports.intValue())
+                           .protocol("tcp")
+                           .sourceSecurityGroupId(application_security_group.id())
+                           .securityGroupId(ec2_security_group.id())
+                           .build());
+                   SecurityGroupRule egressRule = new SecurityGroupRule("egressRule", new SecurityGroupRuleArgs.Builder()
+                           .type("egress")
+                           .fromPort(ports.intValue())
+                           .toPort(ports.intValue())
+                           .protocol("tcp")
+                           .sourceSecurityGroupId(ec2_security_group.id())
+                           .securityGroupId(application_security_group.id())
+                           .build());
+               }
+
 
                     var availablezones = AwsFunctions.getAvailabilityZones(GetAvailabilityZonesArgs.builder().state("available").build());
                     availablezones.applyValue(avaiilable -> {
@@ -134,6 +171,33 @@ public class App {
                                         .disableApiTermination(false)
                                         .tags(Map.of("Name","ec2dev"))
                                         .build());
+
+                                List<Output<String>> subnetIds = new ArrayList<>();
+                                for (Subnet subnet : privatesubnet) {
+                                    subnetIds.add(subnet.id());
+                                }
+                                Output<List<String>> subnetIdsOutput = Output.all(subnetIds).applyValue(ids -> ids);
+
+                                SubnetGroup privatesubnetGroup = new SubnetGroup("privatesubnetgroup", SubnetGroupArgs.builder()
+                                        .subnetIds(subnetIdsOutput)
+                                        .build());
+
+
+                                Double dbvolume = (Double) data.get("db_volume");
+                               com.pulumi.aws.rds.Instance rdsDbInstance = new com.pulumi.aws.rds.Instance("csye6225", new com.pulumi.aws.rds.InstanceArgs.Builder()
+                                        .engine(data.get("db_engine").toString())
+                                        .instanceClass("db.t3.micro")
+                                        .multiAz(false)
+                                       .allocatedStorage(dbvolume.intValue())
+                                       .dbName(data.get("db_name").toString())
+                                       .username(data.get("db_username").toString())
+                                       .password(data.get("db_password").toString())
+                                       .vpcSecurityGroupIds(ec2_security_group.id().applyValue(Collections::singletonList))
+                                       .dbSubnetGroupName(privatesubnetGroup.name())
+                                       .publiclyAccessible(false)
+                                       .skipFinalSnapshot(true)
+                                        .build());
+
                         return null;
 
                     }
