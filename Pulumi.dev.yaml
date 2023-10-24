@@ -1,13 +1,21 @@
 encryptionsalt: v1:VBaIekCN0/o=:v1:nY4gdchICMbQhJ5N:fI3RsI895DxmJHOwfV3vumE7QsAClQ==
 config:
-  aws:profile: demo
+  aws:profile: dev
   aws:region: us-east-1
 
   iac:data:
     vpcCidr: 10.0.0.0/16
-    ports: [22,80,443,8080]
+    portsforec2: [22,80,443,8080]
+    portsforrds: [5432]
     volume: 25
-    Keyname : "demonewtest"
-    AmiId : "ami-05c3de029c774b36b"
+    Keyname : "newtest"
+    AmiId : "ami-0b2548ba8d5fea196"
     owner_id : "251122969914"
+    db_engine : "postgres"
+    db_volume : 20
+    db_name : "csye6225"
+    db_username : "postgres"
+    db_password : "UdaR9603"
+
+
 
