@@ -9,7 +9,7 @@ config:
     portsforrds: [5432]
     volume: 25
     Keyname : "newtest"
-    AmiId : "ami-0b2548ba8d5fea196"
+    AmiId : "ami-06ffcc271c8ce4ba4"
     owner_id : "251122969914"
     db_engine : "postgres"
     db_volume : 20
