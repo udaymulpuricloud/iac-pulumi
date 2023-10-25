@@ -168,7 +168,7 @@ public class App {
 
 
                                 Double dbvolume = (Double) data.get("db_volume");
-                                Double portnum = (Double) data.get("db_volume");
+                                Double portnum = (Double) data.get("port");
                                com.pulumi.aws.rds.Instance rdsDbInstance = new com.pulumi.aws.rds.Instance("csye6225", new com.pulumi.aws.rds.InstanceArgs.Builder()
                                         .engine(data.get("db_engine").toString())
                                         .instanceClass("db.t3.micro")
@@ -189,11 +189,11 @@ public class App {
 
                                 Output<String> userDataScript =rdsDbInstance.address().applyValue(v -> String.format(
                                         "#!/bin/bash\n" +
-                                                "echo 'export DB_USER=%s' >> /etc/environment\n" +
-                                                "echo 'export DB_PASSWORD=%s' >> /etc/environment\n" +
-                                                "echo 'export LOCALHOST=%s' >> /etc/environment\n" +
-                                                "echo 'export PORT=%s' >> /etc/environment\n"+
-                                                "echo 'export DB =%s' >> /etc/environment\n"+
+                                                "echo 'export DB_USER=%s' >> /opt/csye6225/application.properties\n" +
+                                                "echo 'export DB_PASSWORD=%s' >> /opt/csye6225/application.properties\n" +
+                                                "echo 'export LOCALHOST=%s' >> /opt/csye6225/application.properties\n" +
+                                                "echo 'export PORT=%s' >> /opt/csye6225/application.properties\n"+
+                                                "echo 'export DB=%s' >> /opt/csye6225/application.properties\n",
 
                                         username, password,v,portnum.intValue() ,data.get("db_name").toString()
                                 ));
