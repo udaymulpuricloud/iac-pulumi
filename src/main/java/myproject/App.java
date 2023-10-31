@@ -51,7 +51,7 @@ public class App {
                             .tags(Map.of("Name", vpcname + "-privateroutetable"))
                             .build());
                     ParameterGroup parameterGroup = new ParameterGroup("postgrespg",new ParameterGroupArgs.Builder()
-                            .family("postgres14")
+                            .family("postgres15")
 //                            .parameters(ParameterGroupParameterArgs.builder()
 //                                    .name("postgrespg")
 //                                    .build())
@@ -174,6 +174,7 @@ public class App {
                                         .instanceClass("db.t3.micro")
                                         .multiAz(false)
                                        .allocatedStorage(dbvolume.intValue())
+                                       .parameterGroupName(parameterGroup.name())
                                        .dbName(data.get("db_name").toString())
                                        .username(data.get("db_username").toString())
                                        .password(data.get("db_password").toString())
