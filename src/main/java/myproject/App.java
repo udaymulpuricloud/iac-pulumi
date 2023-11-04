@@ -17,6 +17,8 @@ import com.pulumi.aws.rds.ParameterGroupArgs;
 import com.pulumi.aws.rds.SubnetGroup;
 import com.pulumi.aws.rds.SubnetGroupArgs;
 import com.pulumi.aws.rds.inputs.ParameterGroupParameterArgs;
+import com.pulumi.aws.route53.Record;
+import com.pulumi.aws.route53.RecordArgs;
 import com.pulumi.core.Output;
 import com.pulumi.aws.s3.Bucket;
 import jdk.jshell.Snippet;
@@ -217,6 +219,15 @@ public class App {
                                         .disableApiTermination(false)
                                         .tags(Map.of("Name","ec2dev"))
                                         .userData(userDataScript)
+                                        .build());
+//                                instance.wait(InstanceS)
+
+                                Record aRecord=new Record("aRecord",new RecordArgs.Builder()
+                                        .zoneId(data.get("ZoneId").toString())
+                                        .name(data.get("DomainName").toString())
+                                        .type("A")
+                                        .ttl(60)
+                                        .records(instance.publicIp().applyValue(Collections::singletonList))
                                         .build());
 
 
