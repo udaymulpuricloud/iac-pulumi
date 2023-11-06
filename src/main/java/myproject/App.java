@@ -8,6 +8,7 @@ import com.pulumi.aws.ec2.*;
 
 import com.pulumi.aws.ec2.inputs.*;
 import com.pulumi.aws.ec2.outputs.GetAmiResult;
+import com.pulumi.aws.iam.*;
 import com.pulumi.aws.inputs.GetAvailabilityZonesArgs;
 
 import com.pulumi.aws.outputs.GetAvailabilityZoneResult;
@@ -25,6 +26,8 @@ import jdk.jshell.Snippet;
 
 import java.util.*;
 import java.util.stream.Collectors;
+
+import static com.pulumi.codegen.internal.Serialization.*;
 
 public class App {
     public static void main(String[] args) {
@@ -54,10 +57,24 @@ public class App {
                             .build());
                     ParameterGroup parameterGroup = new ParameterGroup("postgrespg",new ParameterGroupArgs.Builder()
                             .family("postgres15")
-//                            .parameters(ParameterGroupParameterArgs.builder()
-//                                    .name("postgrespg")
-//                                    .build())
                             .tags(Map.of("Name","postgrespg"))
+                            .build());
+                    Role cwrole = new Role("awscwrole",new RoleArgs.Builder()
+                            .assumeRolePolicy("{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Principal\":{\"Service\":\"ec2.amazonaws.com\"},\"Action\":\"sts:AssumeRole\"}]}")
+                            .tags(Map.of("Name","awscwrole"))
+                            .build());
+
+                    Output<String> roleNameOutput = cwrole.name();
+               Output<List<String>> listOutput = roleNameOutput.applyValue(s -> Collections.singletonList(s));
+
+            PolicyAttachment policyAttachment =new PolicyAttachment("ec2-policy",new PolicyAttachmentArgs.Builder()
+                            .policyArn("arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy")
+                            .roles(listOutput)
+                            .build());
+
+                    InstanceProfile instanceProfile=new InstanceProfile("ec2awsinstanceprofile",new InstanceProfileArgs.Builder()
+                         .role(cwrole.name())
+                         .name("ec2awsinstanceprofile")
                             .build());
 
             List<Double> allowedPorts = (List<Double>) data.get("portsforec2");
@@ -95,7 +112,8 @@ public class App {
                            .fromPort(ports.intValue())
                            .toPort(ports.intValue())
                            .protocol("tcp")
-                           .sourceSecurityGroupId(ec2_security_group.id())
+//                           .sourceSecurityGroupId(ec2_security_group.id())
+                           .cidrBlocks(Collections.singletonList("0.0.0.0/0"))
                            .securityGroupId(application_security_group.id())
                            .build());
                }
@@ -196,9 +214,12 @@ public class App {
                                                 "echo 'export DB_PASSWORD=%s' >> /opt/csye6225/application.properties\n" +
                                                 "echo 'export LOCALHOST=%s' >> /opt/csye6225/application.properties\n" +
                                                 "echo 'export PORT=%s' >> /opt/csye6225/application.properties\n"+
-                                                "echo 'export DB=%s' >> /opt/csye6225/application.properties\n",
+                                                "echo 'export DB=%s' >> /opt/csye6225/application.properties\n"+
+                                                "sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -c file:/opt/cloudwatch-config.json -s\n"+
+                                                "sudo systemctl start amazon-cloudwatch-agent",
 
                                         username, password,v,portnum.intValue() ,data.get("db_name").toString()
+
                                 ));
 
 
@@ -217,10 +238,10 @@ public class App {
                                         .vpcSecurityGroupIds(application_security_group.id().applyValue(Collections::singletonList))
                                         .subnetId(publicsubnet[0].id())
                                         .disableApiTermination(false)
+                                        .iamInstanceProfile(instanceProfile.name())
                                         .tags(Map.of("Name","ec2dev"))
                                         .userData(userDataScript)
                                         .build());
-//                                instance.wait(InstanceS)
 
                                 Record aRecord=new Record("aRecord",new RecordArgs.Builder()
                                         .zoneId(data.get("ZoneId").toString())

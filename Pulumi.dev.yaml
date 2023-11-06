@@ -11,7 +11,7 @@ config:
     Keyname : "newtest"
     ZoneId : "Z02309392VMS0CMQYNL7Y"
     DomainName : "dev.udaykiranreddy.me"
-    AmiId : "ami-09592cc00eb132940"
+    AmiId : "ami-0f0c0cbe87c3f1f55"
     owner_id : "251122969914"
     db_engine : "postgres"
     db_volume : 20
