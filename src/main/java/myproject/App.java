@@ -107,16 +107,23 @@ public class App {
                            .sourceSecurityGroupId(application_security_group.id())
                            .securityGroupId(ec2_security_group.id())
                            .build());
-                   SecurityGroupRule egressRule = new SecurityGroupRule("egressRule"+ports, new SecurityGroupRuleArgs.Builder()
+                   SecurityGroupRule egressRulepostgres = new SecurityGroupRule("egressRulepostgres"+ports, new SecurityGroupRuleArgs.Builder()
                            .type("egress")
                            .fromPort(ports.intValue())
                            .toPort(ports.intValue())
                            .protocol("tcp")
-//                           .sourceSecurityGroupId(ec2_security_group.id())
-                           .cidrBlocks(Collections.singletonList("0.0.0.0/0"))
+                           .sourceSecurityGroupId(ec2_security_group.id())
                            .securityGroupId(application_security_group.id())
                            .build());
                }
+               SecurityGroupRule egresshttps = new SecurityGroupRule("egresshttps", new SecurityGroupRuleArgs.Builder()
+                       .type("egress")
+                       .fromPort(443)
+                       .toPort(443)
+                       .protocol("tcp")
+                       .cidrBlocks(Collections.singletonList("0.0.0.0/0"))
+                       .securityGroupId(application_security_group.id())
+                       .build());
 
 
                     var availablezones = AwsFunctions.getAvailabilityZones(GetAvailabilityZonesArgs.builder().state("available").build());
