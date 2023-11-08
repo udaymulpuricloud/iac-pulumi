@@ -1,6 +1,6 @@
 encryptionsalt: v1:VBaIekCN0/o=:v1:nY4gdchICMbQhJ5N:fI3RsI895DxmJHOwfV3vumE7QsAClQ==
 config:
-  aws:profile: dev
+  aws:profile: demo
   aws:region: us-east-1
 
   iac:data:
@@ -8,10 +8,10 @@ config:
     portsforec2: [22,80,443,8080]
     portsforrds: [5432]
     volume: 25
-    Keyname : "newtest"
-    ZoneId : "Z02309392VMS0CMQYNL7Y"
-    DomainName : "dev.udaykiranreddy.me"
-    AmiId : "ami-0f0c0cbe87c3f1f55"
+    Keyname : "demonewtest"
+    ZoneId : "Z02306402DI3JY8CVQS45"
+    DomainName : "demo.udaykiranreddy.me"
+    AmiId : "ami-0bc64f7011522cf4e"
     owner_id : "251122969914"
     db_engine : "postgres"
     db_volume : 20
