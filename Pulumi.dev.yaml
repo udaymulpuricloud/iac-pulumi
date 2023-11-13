@@ -5,9 +5,13 @@ config:
 
   iac:data:
     vpcCidr: 10.0.0.0/16
-    portsforec2: [22,80,443,8080]
+    portsforec2: [22,8080]
     portsforrds: [5432]
+    portsforlb: [80,443]
     volume: 25
+    minec2 : 1
+    maxec2 : 3
+    desiredcapacity : 1
     Keyname : "demonewtest"
     ZoneId : "Z02306402DI3JY8CVQS45"
     DomainName : "demo.udaykiranreddy.me"
