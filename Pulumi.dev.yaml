@@ -15,7 +15,7 @@ config:
     Keyname : "demonewtest"
     ZoneId : "Z02306402DI3JY8CVQS45"
     DomainName : "demo.udaykiranreddy.me"
-    AmiId : "ami-0bc64f7011522cf4e"
+    AmiId : "ami-051fdafda6a7d4fb6"
     owner_id : "251122969914"
     db_engine : "postgres"
     db_volume : 20

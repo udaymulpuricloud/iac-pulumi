@@ -6,6 +6,8 @@ import com.pulumi.Pulumi;
 import com.pulumi.aws.AwsFunctions;
 import com.pulumi.aws.alb.*;
 import com.pulumi.aws.alb.inputs.ListenerDefaultActionArgs;
+import com.pulumi.aws.alb.inputs.TargetGroupHealthCheckArgs;
+//import com.pulumi.aws.alb.inputs.TargetGroupTargetHealthStateArgs;
 import com.pulumi.aws.autoscaling.AutoscalingFunctions;
 import com.pulumi.aws.autoscaling.Group;
 import com.pulumi.aws.autoscaling.GroupArgs;
@@ -14,6 +16,8 @@ import com.pulumi.aws.autoscaling.PolicyArgs;
 import com.pulumi.aws.autoscaling.inputs.GroupLaunchTemplateArgs;
 import com.pulumi.aws.autoscaling.inputs.PolicyTargetTrackingConfigurationArgs;
 import com.pulumi.aws.autoscaling.inputs.PolicyTargetTrackingConfigurationPredefinedMetricSpecificationArgs;
+import com.pulumi.aws.cloudwatch.MetricAlarm;
+import com.pulumi.aws.cloudwatch.MetricAlarmArgs;
 import com.pulumi.aws.ec2.*;
 
 import com.pulumi.aws.ec2.inputs.*;
@@ -21,6 +25,7 @@ import com.pulumi.aws.ec2.outputs.GetAmiResult;
 import com.pulumi.aws.iam.*;
 import com.pulumi.aws.inputs.GetAvailabilityZonesArgs;
 
+import com.pulumi.aws.lb.outputs.TargetGroupHealthCheck;
 import com.pulumi.aws.outputs.GetAvailabilityZoneResult;
 
 import com.pulumi.aws.rds.ParameterGroup;
@@ -139,9 +144,18 @@ public class App {
                         .toPort(lbport.intValue())
                         .protocol("tcp")
                         .securityGroupId(loadbalancersg.id())
+                        .sourceSecurityGroupId(application_security_group.id())
                         .build());
 
             }
+            SecurityGroupRule egress = new SecurityGroupRule("lbingress ", new SecurityGroupRuleArgs.Builder()
+                    .type("egress")
+                    .fromPort(0)
+                    .toPort(0)
+                    .protocol("-1")
+                    .securityGroupId(loadbalancersg.id())
+                    .cidrBlocks(Collections.singletonList("0.0.0.0/0"))
+                    .build());
             for (Double port : allowedPorts) {
                 SecurityGroupRule rule = new SecurityGroupRule("ingressRule-" + port, new SecurityGroupRuleArgs.Builder()
                         .type("ingress")
@@ -241,7 +255,8 @@ public class App {
                                 String username = data.get("db_username").toString();
                                 String password = data.get("db_password").toString();
 
-                                Output<String> userDataScript =rdsDbInstance.address().applyValue(v -> String.format(
+                                Output<String> userDataScript =rdsDbInstance.address().applyValue(v ->
+                                        Base64.getEncoder().encodeToString(String.format(
                                         "#!/bin/bash\n" +
                                                 "echo 'export DB_USER=%s' >> /opt/csye6225/application.properties\n" +
                                                 "echo 'export DB_PASSWORD=%s' >> /opt/csye6225/application.properties\n" +
@@ -251,30 +266,29 @@ public class App {
                                                 "sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -c file:/opt/cloudwatch-config.json -s\n"+
                                                 "sudo systemctl start amazon-cloudwatch-agent",
 
-                                        username, password,v,portnum.intValue() ,data.get("db_name").toString()
+                                        username, password,v,portnum.intValue() ,data.get("db_name").toString()).getBytes()
 
                                 ));
 
 
-
                                 Double volume = (Double) data.get("volume");
-                                Instance instance= new Instance("devec2",new InstanceArgs.Builder()
-                                        .ami(data.get("AmiId").toString())
-                                        .instanceType("t2.micro")
-                                        .keyName(data.get("Keyname").toString())
-                                        .ebsBlockDevices(InstanceEbsBlockDeviceArgs.builder()
-                                                .deviceName("/dev/xvda")
-                                                .volumeType("gp2")
-                                                .volumeSize(volume.intValue())
-                                                .deleteOnTermination(true)
-                                                .build())
-                                        .vpcSecurityGroupIds(application_security_group.id().applyValue(Collections::singletonList))
-                                        .subnetId(publicsubnet[0].id())
-                                        .disableApiTermination(false)
-                                        .iamInstanceProfile(instanceProfile.name())
-                                        .tags(Map.of("Name","ec2dev"))
-                                        .userData(userDataScript)
-                                        .build());
+//                                Instance instance= new Instance("devec2",new InstanceArgs.Builder()
+//                                        .ami(data.get("AmiId").toString())
+//                                        .instanceType("t2.micro")
+//                                        .keyName(data.get("Keyname").toString())
+//                                        .ebsBlockDevices(InstanceEbsBlockDeviceArgs.builder()
+//                                                .deviceName("/dev/xvda")
+//                                                .volumeType("gp2")
+//                                                .volumeSize(volume.intValue())
+//                                                .deleteOnTermination(true)
+//                                                .build())
+//                                        .vpcSecurityGroupIds(application_security_group.id().applyValue(Collections::singletonList))
+//                                        .subnetId(publicsubnet[0].id())
+//                                        .disableApiTermination(false)
+//                                        .iamInstanceProfile(instanceProfile.name())
+//                                        .tags(Map.of("Name","ec2dev"))
+//                                        .userData(userDataScript)
+//                                        .build());
 
                                 LaunchTemplate launchTemplate = new LaunchTemplate("ec2launchtemplace", new LaunchTemplateArgs.Builder()
                                         .imageId(data.get("AmiId").toString())
@@ -294,24 +308,46 @@ public class App {
                                         .vpcSecurityGroupIds(application_security_group.id().applyValue(Collections::singletonList))
                                         .tags(Map.of("Name","ec2LaunchTemplate"))
                                         .userData(userDataScript)
-                                        .networkInterfaces(LaunchTemplateNetworkInterfaceArgs.builder()
-                                                .associatePublicIpAddress("true")
-                                                .subnetId(publicsubnet[0].id())
-                                                .build())
+//                                        .networkInterfaces(LaunchTemplateNetworkInterfaceArgs.builder()
+//                                                .associatePublicIpAddress("true")
+////                                                .subnetId(publicsubnet[0].id())
+//                                                .securityGroups(application_security_group.id().applyValue(Collections::singletonList))
+//                                                .build())
+//                                        .placement(LaunchTemplatePlacementArgs.builder()
+//                                                .availabilityZone("us-east-1a")
+//                                                .build())
                                         .disableApiTermination(false)
                                         .build());
 
                                 Double minsize= (Double)data.get("minec2");
                                 Double maxsize= (Double)data.get("maxec2");
                                 Double desiredcap=(Double)data.get("desiredcapacity");
-                                TargetGroup targetGroup= new TargetGroup("targetgroup", new TargetGroupArgs.Builder()
-                                        .port(80)
+
+                        TargetGroup targetGroup = new TargetGroup("targetgroup",new TargetGroupArgs.Builder()
+                                .port(8080)
+                                .protocol("HTTP")
+                                .targetType("instance")
+                                .vpcId(newvpc.id())
+                                .healthCheck(TargetGroupHealthCheckArgs.builder()
+                                        .port("8080")
+                                        .path("/healthz")
                                         .protocol("HTTP")
-                                        .targetType("instance")
-                                        .vpcId(newvpc.id())
-                                        .build());
+                                        .enabled(true)
+                                        .interval(300)
+                                        .timeout(5)
+                                        .healthyThreshold(3)
+                                        .unhealthyThreshold(5)
+                                        .build())
+                                .build());
+
+                                Output<String> securityGroupId = (Output<String>) data.get("load_balancer_sg");
+                                for (Subnet subnet : publicsubnet) {
+                                    subnetIds.add(subnet.id());
+                                }
+                                Output<List<String>> subnetIdsOp = Output.all(subnetIds).applyValue(ids -> ids);
+
                                 Group autoscale= new Group("autoscaling", new GroupArgs.Builder()
-                                        .availabilityZones(availablelist)
+                                        .vpcZoneIdentifiers(subnetIdsOp)
                                         .desiredCapacity(desiredcap.intValue())
                                         .minSize(minsize.intValue())
                                         .maxSize(maxsize.intValue())
@@ -319,36 +355,90 @@ public class App {
                                         .launchTemplate(GroupLaunchTemplateArgs.builder()
                                                 .id(launchTemplate.id())
                                                 .build())
-                                        .targetGroupArns(Arrays.asList(targetGroup.toString()))
+                                        .targetGroupArns(targetGroup.arn().applyValue(Collections::singletonList))
                                         .build());
 
-                                Policy upscalepolicy = new Policy("upscalepolicy", new PolicyArgs.Builder()
-                                        .autoscalingGroupName(autoscale.name())
+//                                Policy upscalepolicy = new Policy("upscalepolicy", new PolicyArgs
+//                                        .Builder()
+//                                        .autoscalingGroupName(autoscale.name())
+//                                        .policyType("SimpleScaling") // Set policy type to TargetTrackingScaling
+//                                        .scalingAdjustment(1)
+//                                        .targetTrackingConfiguration(
+//                                                new PolicyTargetTrackingConfigurationArgs.Builder()
+//                                                        .predefinedMetricSpecification(
+//                                                                PolicyTargetTrackingConfigurationPredefinedMetricSpecificationArgs.builder()
+//                                                                        .predefinedMetricType("ASGAverageCPUUtilization")
+//                                                                        .build()
+//                                                        )
+//                                                        .targetValue(5.0)
+//                                                        .build()
+//                                        )
+//                                        .build()
+//                                );
+//
+//
+//                                Policy downscalepolicy = new Policy("downscalepolicy", new PolicyArgs.Builder()
+//                                        .autoscalingGroupName(autoscale.name())
+////                                        .adjustmentType("ChangeInCapacity")
+//                                        .policyType("SimpleScaling")
+//                                        .scalingAdjustment(-1)
+//                                        .targetTrackingConfiguration(new PolicyTargetTrackingConfigurationArgs.Builder()
+//                                                .predefinedMetricSpecification(PolicyTargetTrackingConfigurationPredefinedMetricSpecificationArgs.builder()
+//                                                        .predefinedMetricType("ASGAverageCPUUtilization")
+//                                                        .build())
+//                                                .targetValue(3.0)
+//                                                .build())
+//                                        .build());
+//
+                                Policy uppolicy = new Policy("uppolicy",PolicyArgs.builder()
                                         .adjustmentType("ChangeInCapacity")
+                                        .cooldown(60)
                                         .scalingAdjustment(1)
-                                        .targetTrackingConfiguration(new PolicyTargetTrackingConfigurationArgs.Builder()
-                                                .predefinedMetricSpecification(PolicyTargetTrackingConfigurationPredefinedMetricSpecificationArgs.builder()
-                                                        .predefinedMetricType("ASGAverageCPUUtilization")
-                                                        .build())
-                                                .targetValue(5.0)
-                                                .build())
+                                        .autoscalingGroupName(autoscale.name())
                                         .build());
 
-                                Policy downscalepolicy = new Policy("downscalepolicy", new PolicyArgs.Builder()
-                                        .autoscalingGroupName(autoscale.name())
-                                        .adjustmentType("ChangeInCapacity")
-                                        .scalingAdjustment(-1)
-                                        .targetTrackingConfiguration(new PolicyTargetTrackingConfigurationArgs.Builder()
-                                                .predefinedMetricSpecification(PolicyTargetTrackingConfigurationPredefinedMetricSpecificationArgs.builder()
-                                                        .predefinedMetricType("ASGAverageCPUUtilization")
-                                                        .build())
-                                                .targetValue(3.0)
-                                                .build())
+                                // Create CloudWatch alarm to trigger the scale up policy
+                                MetricAlarm scaleUpAlarm = new MetricAlarm("scaleUpAlarm", new MetricAlarmArgs.Builder()
+                                        .actionsEnabled(true)
+                                        .alarmActions(uppolicy.arn().applyValue(Collections::singletonList))
+                                        .namespace("AWS/EC2")
+                                        .metricName("CPUUtilization")
+                                        .evaluationPeriods(2) // number of periods to evaluate the condition
+                                        .period(60) // duration of each period in seconds
+                                        .statistic("Average")
+                                        .threshold(5.0) // threshold for the alarm
+                                        .comparisonOperator("GreaterThanOrEqualToThreshold")
                                         .build());
+
+
+
+                                Policy downpolicy = new Policy("downpolicy",PolicyArgs.builder()
+                                        .adjustmentType("ChangeInCapacity")
+                                        .cooldown(60)
+                                        .scalingAdjustment(-1)
+                                        .autoscalingGroupName(autoscale.name())
+                                        .build());
+
+                                // Create CloudWatch alarm to trigger the scale up policy
+                                MetricAlarm scaleDownAlarm = new MetricAlarm("scaleDownAlarm", new MetricAlarmArgs.Builder()
+                                        .actionsEnabled(true)
+                                        .alarmActions(downpolicy.arn().applyValue(Collections::singletonList))
+                                        .namespace("AWS/EC2")
+                                        .metricName("CPUUtilization")
+                                        .evaluationPeriods(2) // number of periods to evaluate the condition
+                                        .period(60) // duration of each period in seconds
+                                        .statistic("Average")
+                                        .threshold(3.0) // threshold for the alarm
+                                        .comparisonOperator("LessThanOrEqualToThreshold")
+                                        .build());
+
+                                List<Output<String>> subnetId = Arrays.asList(publicsubnet[0].id(), publicsubnet[1].id());
+                                Output<List<String>> subnetlist = Output.all(subnetId);
 
                                 com.pulumi.aws.alb.LoadBalancer loadBalancer= new LoadBalancer("loadbalancer",new LoadBalancerArgs.Builder()
                                         .securityGroups(loadbalancersg.id().applyValue(Collections::singletonList))
                                         .internal(false)
+                                        .subnets(subnetlist)
                                         .loadBalancerType("application")
                                         .build());
 
@@ -357,27 +447,21 @@ public class App {
                                         .loadBalancerArn(loadBalancer.arn())
                                         .protocol("HTTP")
                                         .port(80)
-                                        .defaultActions(ListenerDefaultActionArgs.builder()
+                                        .defaultActions(Collections.singletonList(ListenerDefaultActionArgs.builder()
                                                 .type("forward")
                                                 .targetGroupArn(targetGroup.arn())
-                                                .build())
+                                                .build()))
                                         .build());
-
 
                                 Record aRecord=new Record("aRecord",new RecordArgs.Builder()
                                         .zoneId(data.get("ZoneId").toString())
                                         .name(data.get("DomainName").toString())
                                         .type("A")
-                                        .ttl(60)
-                                        .records(loadBalancer.dnsName().applyValue(Collections::singletonList))
-//                                        .records(instance.publicIp().applyValue(Collections::singletonList))
-
-//                                        .aliases(Collections.singletonList(RecordAliasArgs.builder()
-//                                                .evaluateTargetHealth(true)
-//                                                .name(data.get("DomainName").toString())
-//                                                .zoneId(data.get("ZoneId").toString())
-////                                                .dnsName
-//                                                .build()))
+                                        .aliases(Collections.singletonList(RecordAliasArgs.builder()
+                                                .evaluateTargetHealth(true)
+                                                .zoneId(loadBalancer.zoneId())
+                                                .name(loadBalancer.dnsName())
+                                                .build()))
                                         .build());
 
 
