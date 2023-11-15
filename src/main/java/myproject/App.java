@@ -14,6 +14,7 @@ import com.pulumi.aws.autoscaling.GroupArgs;
 import com.pulumi.aws.autoscaling.Policy;
 import com.pulumi.aws.autoscaling.PolicyArgs;
 import com.pulumi.aws.autoscaling.inputs.GroupLaunchTemplateArgs;
+import com.pulumi.aws.autoscaling.inputs.GroupTagArgs;
 import com.pulumi.aws.autoscaling.inputs.PolicyTargetTrackingConfigurationArgs;
 import com.pulumi.aws.autoscaling.inputs.PolicyTargetTrackingConfigurationPredefinedMetricSpecificationArgs;
 import com.pulumi.aws.cloudwatch.MetricAlarm;
@@ -144,7 +145,7 @@ public class App {
                         .toPort(lbport.intValue())
                         .protocol("tcp")
                         .securityGroupId(loadbalancersg.id())
-                        .sourceSecurityGroupId(application_security_group.id())
+                        .cidrBlocks(Collections.singletonList("0.0.0.0/0"))
                         .build());
 
             }
@@ -305,14 +306,14 @@ public class App {
                                                 .build())
                                         .instanceType("t2.micro")
                                         .keyName(data.get("Keyname").toString())
-                                        .vpcSecurityGroupIds(application_security_group.id().applyValue(Collections::singletonList))
+//                                        .vpcSecurityGroupIds(application_security_group.id().applyValue(Collections::singletonList))
                                         .tags(Map.of("Name","ec2LaunchTemplate"))
                                         .userData(userDataScript)
-//                                        .networkInterfaces(LaunchTemplateNetworkInterfaceArgs.builder()
-//                                                .associatePublicIpAddress("true")
-////                                                .subnetId(publicsubnet[0].id())
-//                                                .securityGroups(application_security_group.id().applyValue(Collections::singletonList))
-//                                                .build())
+                                        .networkInterfaces(LaunchTemplateNetworkInterfaceArgs.builder()
+                                                .associatePublicIpAddress("true")
+//                                                .subnetId(publicsubnet[0].id())
+                                                .securityGroups(application_security_group.id().applyValue(Collections::singletonList))
+                                                .build())
 //                                        .placement(LaunchTemplatePlacementArgs.builder()
 //                                                .availabilityZone("us-east-1a")
 //                                                .build())
@@ -340,99 +341,77 @@ public class App {
                                         .build())
                                 .build());
 
-                                Output<String> securityGroupId = (Output<String>) data.get("load_balancer_sg");
+//                                Output<String> securityGroupId = (Output<String>) data.get("load_balancer_sg");
+                             subnetIds = new ArrayList<>();
                                 for (Subnet subnet : publicsubnet) {
                                     subnetIds.add(subnet.id());
                                 }
                                 Output<List<String>> subnetIdsOp = Output.all(subnetIds).applyValue(ids -> ids);
 
-                                Group autoscale= new Group("autoscaling", new GroupArgs.Builder()
-                                        .vpcZoneIdentifiers(subnetIdsOp)
-                                        .desiredCapacity(desiredcap.intValue())
-                                        .minSize(minsize.intValue())
-                                        .maxSize(maxsize.intValue())
-                                        .defaultCooldown(60)
-                                        .launchTemplate(GroupLaunchTemplateArgs.builder()
-                                                .id(launchTemplate.id())
-                                                .build())
+
+                                var autoscaling = new com.pulumi.aws.autoscaling.Group("autoscalegroup", GroupArgs.builder()
+                                        .maxSize(3)
+                                        .minSize(1)
+                                        .healthCheckGracePeriod(300)
+                                        .healthCheckType("ELB")
+                                        .forceDelete(false)
+                                        .terminationPolicies(Collections.singletonList("OldestInstance"))
+                                        .vpcZoneIdentifiers(subnetIdsOutput)
+                                        .metricsGranularity("1Minute")
                                         .targetGroupArns(targetGroup.arn().applyValue(Collections::singletonList))
+                                        .launchTemplate(GroupLaunchTemplateArgs.builder().id(launchTemplate.id()).build())
+                                        .tags(GroupTagArgs.builder()
+                                                .propagateAtLaunch(true)
+                                                .key("Name")
+                                                .value("Autoscale Instances")
+                                                .build(),GroupTagArgs.builder()
+                                                .propagateAtLaunch(true)
+                                                .key("Assignment")
+                                                .value("Load Balancer")
+                                                .build())
+
                                         .build());
 
-//                                Policy upscalepolicy = new Policy("upscalepolicy", new PolicyArgs
-//                                        .Builder()
-//                                        .autoscalingGroupName(autoscale.name())
-//                                        .policyType("SimpleScaling") // Set policy type to TargetTrackingScaling
-//                                        .scalingAdjustment(1)
-//                                        .targetTrackingConfiguration(
-//                                                new PolicyTargetTrackingConfigurationArgs.Builder()
-//                                                        .predefinedMetricSpecification(
-//                                                                PolicyTargetTrackingConfigurationPredefinedMetricSpecificationArgs.builder()
-//                                                                        .predefinedMetricType("ASGAverageCPUUtilization")
-//                                                                        .build()
-//                                                        )
-//                                                        .targetValue(5.0)
-//                                                        .build()
-//                                        )
-//                                        .build()
-//                                );
-//
-//
-//                                Policy downscalepolicy = new Policy("downscalepolicy", new PolicyArgs.Builder()
-//                                        .autoscalingGroupName(autoscale.name())
-////                                        .adjustmentType("ChangeInCapacity")
-//                                        .policyType("SimpleScaling")
-//                                        .scalingAdjustment(-1)
-//                                        .targetTrackingConfiguration(new PolicyTargetTrackingConfigurationArgs.Builder()
-//                                                .predefinedMetricSpecification(PolicyTargetTrackingConfigurationPredefinedMetricSpecificationArgs.builder()
-//                                                        .predefinedMetricType("ASGAverageCPUUtilization")
-//                                                        .build())
-//                                                .targetValue(3.0)
-//                                                .build())
-//                                        .build());
-//
-                                Policy uppolicy = new Policy("uppolicy",PolicyArgs.builder()
-                                        .adjustmentType("ChangeInCapacity")
-                                        .cooldown(60)
+                                var upscale = new com.pulumi.aws.autoscaling.Policy("scaleuppol", PolicyArgs.builder()
                                         .scalingAdjustment(1)
-                                        .autoscalingGroupName(autoscale.name())
-                                        .build());
-
-                                // Create CloudWatch alarm to trigger the scale up policy
-                                MetricAlarm scaleUpAlarm = new MetricAlarm("scaleUpAlarm", new MetricAlarmArgs.Builder()
-                                        .actionsEnabled(true)
-                                        .alarmActions(uppolicy.arn().applyValue(Collections::singletonList))
-                                        .namespace("AWS/EC2")
-                                        .metricName("CPUUtilization")
-                                        .evaluationPeriods(2) // number of periods to evaluate the condition
-                                        .period(60) // duration of each period in seconds
-                                        .statistic("Average")
-                                        .threshold(5.0) // threshold for the alarm
-                                        .comparisonOperator("GreaterThanOrEqualToThreshold")
-                                        .build());
-
-
-
-                                Policy downpolicy = new Policy("downpolicy",PolicyArgs.builder()
                                         .adjustmentType("ChangeInCapacity")
-                                        .cooldown(60)
+                                        .policyType("SimpleScaling")
+                                        .cooldown(300)
+                                        .autoscalingGroupName(autoscaling.name())
+                                        .build());
+                                var downscale = new com.pulumi.aws.autoscaling.Policy("scaledownpol", PolicyArgs.builder()
                                         .scalingAdjustment(-1)
-                                        .autoscalingGroupName(autoscale.name())
+                                        .adjustmentType("ChangeInCapacity")
+                                        .policyType("SimpleScaling")
+                                        .cooldown(300)
+                                        .autoscalingGroupName(autoscaling.name())
                                         .build());
-
-                                // Create CloudWatch alarm to trigger the scale up policy
-                                MetricAlarm scaleDownAlarm = new MetricAlarm("scaleDownAlarm", new MetricAlarmArgs.Builder()
-                                        .actionsEnabled(true)
-                                        .alarmActions(downpolicy.arn().applyValue(Collections::singletonList))
-                                        .namespace("AWS/EC2")
-                                        .metricName("CPUUtilization")
-                                        .evaluationPeriods(2) // number of periods to evaluate the condition
-                                        .period(60) // duration of each period in seconds
-                                        .statistic("Average")
-                                        .threshold(3.0) // threshold for the alarm
-                                        .comparisonOperator("LessThanOrEqualToThreshold")
-                                        .build());
-
-                                List<Output<String>> subnetId = Arrays.asList(publicsubnet[0].id(), publicsubnet[1].id());
+                                var scaleUpAlarm = new MetricAlarm("scaleupalarm",
+                                        MetricAlarmArgs.builder()
+                                                .comparisonOperator("GreaterThanOrEqualToThreshold")
+                                                .evaluationPeriods(2)
+                                                .metricName("CPUUtilization")
+                                                .namespace("AWS/EC2")
+                                                .period(60)
+                                                .statistic("Average").threshold(5.0)
+                                                .alarmDescription("Alarm if server CPU too high")
+                                                .alarmActions(upscale.arn().applyValue(Collections::singletonList))
+                                                .dimensions(autoscaling.name().applyValue(s -> Map.of("AutoScalingGroupName", s)))
+                                                .build()
+                                );
+                                var scaleDownAlarm = new MetricAlarm("scaledownalarm",
+                                        MetricAlarmArgs.builder()
+                                                .comparisonOperator("LessThanOrEqualToThreshold")
+                                                .evaluationPeriods(2)
+                                                .metricName("CPUUtilization")
+                                                .namespace("AWS/EC2")
+                                                .period(60)
+                                                .statistic("Average").threshold(3.0)
+                                                .alarmDescription("Alarm CPU too low")
+                                                .alarmActions(downscale.arn().applyValue(Collections::singletonList))
+                                                .dimensions(autoscaling.name().applyValue(s -> Map.of("AutoScalingGroupName", s)))
+                                                .build());
+                                List<Output<String>> subnetId = Arrays.asList(publicsubnet[0].id(), publicsubnet[1].id(),publicsubnet[2].id());
                                 Output<List<String>> subnetlist = Output.all(subnetId);
 
                                 com.pulumi.aws.alb.LoadBalancer loadBalancer= new LoadBalancer("loadbalancer",new LoadBalancerArgs.Builder()
