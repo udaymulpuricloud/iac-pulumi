@@ -1,7 +1,13 @@
+
+
 encryptionsalt: v1:VBaIekCN0/o=:v1:nY4gdchICMbQhJ5N:fI3RsI895DxmJHOwfV3vumE7QsAClQ==
 config:
   aws:profile: demo
   aws:region: us-east-1
+
+  gcp:project: steam-sequencer-405910
+
+
 
   iac:data:
     vpcCidr: 10.0.0.0/16

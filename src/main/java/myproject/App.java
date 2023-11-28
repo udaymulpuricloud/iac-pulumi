@@ -3,11 +3,16 @@ package myproject;
 import com.pulumi.*;
 import com.pulumi.Config;
 import com.pulumi.Pulumi;
+import com.pulumi.asset.Archive;
+import com.pulumi.asset.AssetArchive;
+import com.pulumi.asset.FileArchive;
 import com.pulumi.aws.AwsFunctions;
 import com.pulumi.aws.alb.*;
 import com.pulumi.aws.alb.inputs.ListenerDefaultActionArgs;
 import com.pulumi.aws.alb.inputs.TargetGroupHealthCheckArgs;
 //import com.pulumi.aws.alb.inputs.TargetGroupTargetHealthStateArgs;
+import com.pulumi.aws.appconfig.Environment;
+import com.pulumi.aws.appconfig.EnvironmentArgs;
 import com.pulumi.aws.autoscaling.AutoscalingFunctions;
 import com.pulumi.aws.autoscaling.Group;
 import com.pulumi.aws.autoscaling.GroupArgs;
@@ -19,13 +24,23 @@ import com.pulumi.aws.autoscaling.inputs.PolicyTargetTrackingConfigurationArgs;
 import com.pulumi.aws.autoscaling.inputs.PolicyTargetTrackingConfigurationPredefinedMetricSpecificationArgs;
 import com.pulumi.aws.cloudwatch.MetricAlarm;
 import com.pulumi.aws.cloudwatch.MetricAlarmArgs;
+import com.pulumi.aws.dynamodb.Table;
+import com.pulumi.aws.dynamodb.TableArgs;
+import com.pulumi.aws.dynamodb.inputs.TableAttributeArgs;
 import com.pulumi.aws.ec2.*;
+
+
+
 
 import com.pulumi.aws.ec2.inputs.*;
 import com.pulumi.aws.ec2.outputs.GetAmiResult;
 import com.pulumi.aws.iam.*;
 import com.pulumi.aws.inputs.GetAvailabilityZonesArgs;
 
+import com.pulumi.aws.lambda.*;
+import com.pulumi.aws.lambda.enums.Runtime;
+import com.pulumi.aws.lambda.inputs.FunctionEnvironmentArgs;
+import com.pulumi.aws.lambda.outputs.FunctionEnvironment;
 import com.pulumi.aws.lb.outputs.TargetGroupHealthCheck;
 import com.pulumi.aws.outputs.GetAvailabilityZoneResult;
 
@@ -37,8 +52,18 @@ import com.pulumi.aws.rds.inputs.ParameterGroupParameterArgs;
 import com.pulumi.aws.route53.Record;
 import com.pulumi.aws.route53.RecordArgs;
 import com.pulumi.aws.route53.inputs.RecordAliasArgs;
+import com.pulumi.aws.sns.*;
 import com.pulumi.core.Output;
-import com.pulumi.aws.s3.Bucket;
+import com.pulumi.gcp.organizations.IAMCustomRole;
+import com.pulumi.gcp.organizations.IAMCustomRoleArgs;
+import com.pulumi.gcp.serviceaccount.Account;
+import com.pulumi.gcp.serviceaccount.AccountArgs;
+import com.pulumi.gcp.serviceaccount.Key;
+import com.pulumi.gcp.serviceaccount.KeyArgs;
+import com.pulumi.gcp.storage.Bucket;
+import com.pulumi.gcp.storage.BucketArgs;
+import com.pulumi.gcp.storage.BucketIAMBinding;
+import com.pulumi.gcp.storage.BucketIAMBindingArgs;
 import jdk.jshell.Snippet;
 
 import javax.swing.*;
@@ -46,6 +71,8 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 import static com.pulumi.codegen.internal.Serialization.*;
+import com.pulumi.gcp.*;
+
 
 public class App {
     public static void main(String[] args) {
@@ -55,7 +82,7 @@ public class App {
 
                     String vpcname = "devvpc";
                     String vpccidr = data.get("vpcCidr").toString();
-
+//
                     Vpc newvpc = new Vpc(vpcname, new VpcArgs.Builder()
                             .cidrBlock(vpccidr)
                             .tags(Map.of("Name", vpcname))
@@ -87,6 +114,7 @@ public class App {
 
             PolicyAttachment policyAttachment =new PolicyAttachment("ec2-policy",new PolicyAttachmentArgs.Builder()
                             .policyArn("arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy")
+                            .policyArn("arn:aws:iam::aws:policy/AmazonSNSFullAccess")
                             .roles(listOutput)
                             .build());
 
@@ -255,6 +283,9 @@ public class App {
 
                                 String username = data.get("db_username").toString();
                                 String password = data.get("db_password").toString();
+                              Output<String> dbData=rdsDbInstance.address();
+//                              Output<String> snsarn=(
+
 
                                 Output<String> userDataScript =rdsDbInstance.address().applyValue(v ->
                                         Base64.getEncoder().encodeToString(String.format(
@@ -404,6 +435,7 @@ public class App {
                                                 .comparisonOperator("LessThanOrEqualToThreshold")
                                                 .evaluationPeriods(2)
                                                 .metricName("CPUUtilization")
+                                                .metricName("CPUUtilization")
                                                 .namespace("AWS/EC2")
                                                 .period(60)
                                                 .statistic("Average").threshold(3.0)
@@ -442,6 +474,92 @@ public class App {
                                                 .name(loadBalancer.dnsName())
                                                 .build()))
                                         .build());
+                                Topic topic= new Topic("snstopic", new TopicArgs.Builder()
+                                        .name("Snstopic")
+                                        .build());
+
+                                Role lambdarole = new Role("lambdarole", new RoleArgs.Builder()
+                                        .assumeRolePolicy("{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Principal\":{\"Service\":\"lambda.amazonaws.com\"},\"Action\":\"sts:AssumeRole\"}]}")
+                                         .tags(Map.of("Name","lambdarole"))
+                                        .build());
+                                Output<String> roleNameOutputlambda = lambdarole.name();
+                   Output<List<String>> listOutputlambda = roleNameOutputlambda.applyValue(s -> Collections.singletonList(s));
+
+            PolicyAttachment policyAttachmentlambda =new PolicyAttachment("lambda-policy",new PolicyAttachmentArgs.Builder()
+                            .policyArn("arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole")
+                            .roles(listOutputlambda)
+                            .build());
+                     FileArchive lambdaZipArchive = new FileArchive("/Users/udaykiranreddy/Desktop/Cloud/serverless.zip");
+                    Bucket gcpbucket= new Bucket("gcpbucketudaykirrrr", new BucketArgs.Builder()
+                            .name("gcpbucketudaykirrrr")
+                            .location("US")
+                            .build());
+
+                    Account serviceaccount = new Account("serviceaccount", new AccountArgs.Builder()
+                            .accountId("aws-lambda")
+                            .displayName("Account for Aws Lambda")
+                            .build());
+                    Output<List<String>> serviceaccmail = serviceaccount.email().applyValue(Collections::singletonList);
+                    BucketIAMBinding bucketIAMBinding = new BucketIAMBinding("binding",new BucketIAMBindingArgs.Builder()
+                            .bucket(gcpbucket.name())
+                            .members(serviceaccmail.applyValue(s -> Collections.singletonList("serviceAccount:" + s.get(0)))) // Assuming there's only one email in the list
+                            .role("roles/storage.objectCreator")
+                            .build());
+
+                    Key servicekey= new Key("serviceacckey", new KeyArgs.Builder()
+                            .serviceAccountId(serviceaccount.name())
+                            .publicKeyType("TYPE_X509_PEM_FILE")
+                            .build());
+
+
+                    Map<String, Output<String>> environmentVariables = new HashMap<>();
+
+                    environmentVariables.put("gcp_service_key",servicekey.privateKey());
+                    environmentVariables.put("bucket_name",gcpbucket.name());
+
+                    Output<Map<String, String>> outputEnv = Output.all(environmentVariables.values()).applyValue(values -> {
+                        Map<String, String> finalEnv = new HashMap<>();
+                        int i = 0;
+                        for (String k : environmentVariables.keySet()) {
+                            finalEnv.put(k, values.get(i));
+                            i++;
+                        }
+                        return finalEnv;
+                    });
+                    FunctionEnvironmentArgs functionEnvironmentArgs = FunctionEnvironmentArgs.builder()
+                            .variables(outputEnv)
+                            .build();
+                    Table dynamodb= new Table("dynamodb", new TableArgs.Builder()
+                            .billingMode("PROVISIONED")
+                            .attributes(TableAttributeArgs.builder()
+                                    .name("id")
+                                    .type("S")
+                                    .build())
+                            .hashKey("id")
+                            .readCapacity(20)
+                            .writeCapacity(20)
+                            .build());
+
+                    Function lambda= new Function("lambdafunction", new FunctionArgs.Builder()
+                            .role(lambdarole.arn())
+                            .runtime(Runtime.NodeJS18dX)
+                            .code(lambdaZipArchive)
+                            .handler("index.handler")
+                            .environment(functionEnvironmentArgs)
+                            .build());
+
+                    TopicSubscription snssubscription = new TopicSubscription("snssubscription", new TopicSubscriptionArgs.Builder()
+                            .topic(topic.arn())
+                            .protocol("lambda")
+                            .endpoint(lambda.arn())
+                            .build());
+
+                    Permission permission = new Permission("permission",new PermissionArgs.Builder()
+                            .function(lambda.name())
+                            .action("lambda:InvokeFunction")
+                            .principal("sns.amazonaws.com")
+                            .sourceArn(topic.arn())
+                            .build());
 
 
                                 return null;
