@@ -64,6 +64,7 @@ import com.pulumi.gcp.storage.Bucket;
 import com.pulumi.gcp.storage.BucketArgs;
 import com.pulumi.gcp.storage.BucketIAMBinding;
 import com.pulumi.gcp.storage.BucketIAMBindingArgs;
+import com.pulumi.resources.CustomResourceOptions;
 import jdk.jshell.Snippet;
 
 import javax.swing.*;
@@ -112,11 +113,14 @@ public class App {
                     Output<String> roleNameOutput = cwrole.name();
                Output<List<String>> listOutput = roleNameOutput.applyValue(s -> Collections.singletonList(s));
 
-            PolicyAttachment policyAttachment =new PolicyAttachment("ec2-policy",new PolicyAttachmentArgs.Builder()
+            PolicyAttachment policyAttachment =new PolicyAttachment("ec2-policy-cloudwatch",new PolicyAttachmentArgs.Builder()
                             .policyArn("arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy")
-                            .policyArn("arn:aws:iam::aws:policy/AmazonSNSFullAccess")
                             .roles(listOutput)
                             .build());
+            PolicyAttachment policyAttachment1 = new PolicyAttachment("ec2-policy-sns", new PolicyAttachmentArgs.Builder()
+                    .policyArn("arn:aws:iam::aws:policy/AmazonSNSFullAccess")
+                    .roles(listOutput)
+                    .build());
 
                     InstanceProfile instanceProfile=new InstanceProfile("ec2awsinstanceprofile",new InstanceProfileArgs.Builder()
                          .role(cwrole.name())
@@ -195,6 +199,14 @@ public class App {
                         .securityGroupId(application_security_group.id())
                         .build());
             }
+                    SecurityGroupRule rule = new SecurityGroupRule("ingressRule-22" , new SecurityGroupRuleArgs.Builder()
+                            .type("ingress")
+                            .fromPort(22)
+                            .toPort(22)
+                            .protocol("tcp")
+                            .cidrBlocks("0.0.0.0/0")
+                            .securityGroupId(application_security_group.id())
+                            .build());
                     var availablezones = AwsFunctions.getAvailabilityZones(GetAvailabilityZonesArgs.builder().state("available").build());
                     availablezones.applyValue(avaiilable -> {
                         avaiilable.names();
@@ -283,22 +295,28 @@ public class App {
 
                                 String username = data.get("db_username").toString();
                                 String password = data.get("db_password").toString();
-                              Output<String> dbData=rdsDbInstance.address();
-//                              Output<String> snsarn=(
 
 
-                                Output<String> userDataScript =rdsDbInstance.address().applyValue(v ->
+                                Topic topic= new Topic("snstopic", new TopicArgs.Builder()
+                                        .name("Snstopic")
+                                        .build());
+                                Output<String> dbData=rdsDbInstance.address();
+                                Output<String> snsarn=topic.arn();
+
+                                Output<String> userDataScript =Output.all(dbData,snsarn).applyValue(v ->
                                         Base64.getEncoder().encodeToString(String.format(
                                         "#!/bin/bash\n" +
                                                 "echo 'export DB_USER=%s' >> /opt/csye6225/application.properties\n" +
                                                 "echo 'export DB_PASSWORD=%s' >> /opt/csye6225/application.properties\n" +
                                                 "echo 'export LOCALHOST=%s' >> /opt/csye6225/application.properties\n" +
                                                 "echo 'export PORT=%s' >> /opt/csye6225/application.properties\n"+
+                                                "echo 'export TopicARN=%s' >> /opt/csye6225/application.properties\n"+
                                                 "echo 'export DB=%s' >> /opt/csye6225/application.properties\n"+
+
                                                 "sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -c file:/opt/cloudwatch-config.json -s\n"+
                                                 "sudo systemctl start amazon-cloudwatch-agent",
 
-                                        username, password,v,portnum.intValue() ,data.get("db_name").toString()).getBytes()
+                                        username, password,v.get(0),portnum.intValue() ,v.get(1),data.get("db_name").toString()).getBytes()
 
                                 ));
 
@@ -349,6 +367,9 @@ public class App {
 //                                                .availabilityZone("us-east-1a")
 //                                                .build())
                                         .disableApiTermination(false)
+                                        .build()
+                                , CustomResourceOptions.builder()
+                                        .dependsOn(Collections.singletonList(topic))
                                         .build());
 
                                 Double minsize= (Double)data.get("minec2");
@@ -473,9 +494,6 @@ public class App {
                                                 .zoneId(loadBalancer.zoneId())
                                                 .name(loadBalancer.dnsName())
                                                 .build()))
-                                        .build());
-                                Topic topic= new Topic("snstopic", new TopicArgs.Builder()
-                                        .name("Snstopic")
                                         .build());
 
                                 Role lambdarole = new Role("lambdarole", new RoleArgs.Builder()
