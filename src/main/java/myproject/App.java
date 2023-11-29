@@ -35,6 +35,9 @@ import com.pulumi.aws.ec2.*;
 import com.pulumi.aws.ec2.inputs.*;
 import com.pulumi.aws.ec2.outputs.GetAmiResult;
 import com.pulumi.aws.iam.*;
+import com.pulumi.aws.iam.inputs.GetPolicyDocumentArgs;
+import com.pulumi.aws.iam.inputs.GetPolicyDocumentStatementArgs;
+import com.pulumi.aws.iam.outputs.GetPolicyDocumentResult;
 import com.pulumi.aws.inputs.GetAvailabilityZonesArgs;
 
 import com.pulumi.aws.lambda.*;
@@ -68,6 +71,8 @@ import com.pulumi.resources.CustomResourceOptions;
 import jdk.jshell.Snippet;
 
 import javax.swing.*;
+import java.io.FileInputStream;
+import java.io.IOException;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -247,21 +252,6 @@ public class App {
                             );
                         }
 
-//                        Output<GetAmiResult> debianami =  Ec2Functions.getAmi(new GetAmiArgs.Builder()
-//                                        .filters(new GetAmiFilterArgs.Builder()
-//                                                .name("csye6225_*")
-//                                                .
-//                                                .build())
-//                                        .build());
-//                               final var debianAmi = Ec2Functions.getAmi(new GetAmiArgs.Builder()
-//                                       .filters(Arrays.asList(
-//                                               new GetAmiFilterArgs.Builder().name("name").values("csye6225_*").build(),
-//                                               new GetAmiFilterArgs.Builder().name("description").values("*Debian*").build()))
-//                                       .mostRecent(true)
-//                                       .owners(data.get("owner_id").toString())
-//                                       .build());
-
-//                                Output<String> debianAmiId = debianAmi.apply();
 
 
                                 List<Output<String>> subnetIds = new ArrayList<>();
@@ -298,8 +288,9 @@ public class App {
 
 
                                 Topic topic= new Topic("snstopic", new TopicArgs.Builder()
-                                        .name("Snstopic")
+                                        .name("Sns-topic")
                                         .build());
+
                                 Output<String> dbData=rdsDbInstance.address();
                                 Output<String> snsarn=topic.arn();
 
@@ -408,7 +399,7 @@ public class App {
                                         .healthCheckType("ELB")
                                         .forceDelete(false)
                                         .terminationPolicies(Collections.singletonList("OldestInstance"))
-                                        .vpcZoneIdentifiers(subnetIdsOutput)
+                                        .vpcZoneIdentifiers(subnetIdsOp)
                                         .metricsGranularity("1Minute")
                                         .targetGroupArns(targetGroup.arn().applyValue(Collections::singletonList))
                                         .launchTemplate(GroupLaunchTemplateArgs.builder().id(launchTemplate.id()).build())
@@ -507,7 +498,7 @@ public class App {
                             .policyArn("arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole")
                             .roles(listOutputlambda)
                             .build());
-                     FileArchive lambdaZipArchive = new FileArchive("/Users/udaykiranreddy/Desktop/Cloud/serverless.zip");
+                     FileArchive lambdaZipArchive = new FileArchive("/Users/udaykiranreddy/Desktop/Cloud/serverless/Archive.zip");
                     Bucket gcpbucket= new Bucket("gcpbucketudaykirrrr", new BucketArgs.Builder()
                             .name("gcpbucketudaykirrrr")
                             .location("US")
@@ -526,14 +517,22 @@ public class App {
 
                     Key servicekey= new Key("serviceacckey", new KeyArgs.Builder()
                             .serviceAccountId(serviceaccount.name())
-                            .publicKeyType("TYPE_X509_PEM_FILE")
                             .build());
 
 
                     Map<String, Output<String>> environmentVariables = new HashMap<>();
 
-                    environmentVariables.put("gcp_service_key",servicekey.privateKey());
-                    environmentVariables.put("bucket_name",gcpbucket.name());
+                                Properties properties = new Properties();
+                                try (FileInputStream fis = new FileInputStream(".env")) {
+                                    properties.load(fis);
+                                } catch (IOException e) {
+                                    e.printStackTrace();
+                                }
+
+                    environmentVariables.put("GCP_SERVICE_ACCOUNT_KEY",servicekey.privateKey());
+                    environmentVariables.put("GCP_BUCKET_NAME",gcpbucket.name());
+                    environmentVariables.put("MAILGUN_API",Output.of(properties.getProperty("mailgunapi")));
+
 
                     Output<Map<String, String>> outputEnv = Output.all(environmentVariables.values()).applyValue(values -> {
                         Map<String, String> finalEnv = new HashMap<>();
@@ -548,21 +547,45 @@ public class App {
                             .variables(outputEnv)
                             .build();
                     Table dynamodb= new Table("dynamodb", new TableArgs.Builder()
+                            .name("assignment-submissions")
                             .billingMode("PROVISIONED")
                             .attributes(TableAttributeArgs.builder()
-                                    .name("id")
+                                    .name("submission_id")
                                     .type("S")
                                     .build())
-                            .hashKey("id")
+                            .hashKey("submission_id")
                             .readCapacity(20)
                             .writeCapacity(20)
                             .build());
+
+                                final var dynamoDBPolicyDocument = IamFunctions.getPolicyDocument(GetPolicyDocumentArgs.builder()
+                                        .statements(GetPolicyDocumentStatementArgs.builder()
+                                                .effect("Allow")
+                                                .actions(
+                                                        "dynamodb:PutItem",
+                                                        "dynamodb:GetItem",
+                                                        "dynamodb:DeleteItem",
+                                                        "dynamodb:UpdateItem")
+                                                .resources("arn:aws:dynamodb:*:*:*")
+                                                .build())
+                                        .build());
+                                var dynamoDBPolicy = new com.pulumi.aws.iam.Policy("dynamoDBPolicy", com.pulumi.aws.iam.PolicyArgs.builder()
+                                        .path("/")
+                                        .description("IAM policy for dynamoDB")
+                                        .policy(dynamoDBPolicyDocument.applyValue(GetPolicyDocumentResult::json))
+                                        .build());
+
+                                var dynamoDB = new RolePolicyAttachment("dynamoDB", RolePolicyAttachmentArgs.builder()
+                                        .role(lambdarole.name())
+                                        .policyArn(dynamoDBPolicy.arn())
+                                        .build());
 
                     Function lambda= new Function("lambdafunction", new FunctionArgs.Builder()
                             .role(lambdarole.arn())
                             .runtime(Runtime.NodeJS18dX)
                             .code(lambdaZipArchive)
                             .handler("index.handler")
+                            .timeout(240)
                             .environment(functionEnvironmentArgs)
                             .build());
 

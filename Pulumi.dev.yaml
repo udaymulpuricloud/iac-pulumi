@@ -18,7 +18,7 @@ config:
     minec2 : 1
     maxec2 : 3
     desiredcapacity : 1
-    Keyname : "demonewtest"
+    Keyname : "demoaws"
     ZoneId : "Z02306402DI3JY8CVQS45"
     DomainName : "demo.udaykiranreddy.me"
     AmiId : "ami-0ba7c6336bfc5795e"
