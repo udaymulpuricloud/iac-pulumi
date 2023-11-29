@@ -501,6 +501,7 @@ public class App {
                      FileArchive lambdaZipArchive = new FileArchive("/Users/udaykiranreddy/Desktop/Cloud/serverless/Archive.zip");
                     Bucket gcpbucket= new Bucket("gcpbucketudaykirrrr", new BucketArgs.Builder()
                             .name("gcpbucketudaykirrrr")
+                            .forceDestroy(true)
                             .location("US")
                             .build());
 
