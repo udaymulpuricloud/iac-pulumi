@@ -1,11 +1,27 @@
 # iac-pulumi
-Initiate a new pulumi project with pulumi new
-Logged in locally
-set the region ,cidr in the stack.yaml files
-after updating the code , need to hit pulumi up , then give the password and set the infrastructure 
-Creating the required infrastructure such as Vpc 
-adding subnets as required under the vpc
-creating rds with security group and ingress rules
-then need to create the ec2 with newly created vpc and a new security group with required ports
-need to hit pulumi destroy to destroy all the infrastructure 
+Install and set up the AWS CLI using the following commands:
+aws configure --profile dev
+aws configure --profile demo
+
+To deploy the project, use the following command:
+pulumi up
+
+To change the stack:
+pulumi select stack dev/demo
+
+To create a new stack:
+pulumi stack init example
+
+To destroy the project:
+pulumi destroy
+
+To refresh the infra :
+pulumi refresh
+
+
+Run the below command in the AWS CLI to create a certificate for the domain name in the folder terminal ::
+
+aws iam upload-server-certificate --server-certificate-name demo.udaykiranreddy.me 
+--certificate-body file://certificate.crt --private-key file://private.key --certificate-chain file://ca_bundle.crt 
+--profile demo --region us-east-1
 

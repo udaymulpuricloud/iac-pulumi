@@ -468,8 +468,9 @@ public class App {
 
                                 Listener listener = new Listener("lblistener", new ListenerArgs.Builder()
                                         .loadBalancerArn(loadBalancer.arn())
-                                        .protocol("HTTP")
-                                        .port(80)
+                                        .protocol("HTTPS")
+                                        .port(443)
+                                        .certificateArn("arn:aws:iam::957845414123:server-certificate/certificate_object_name")
                                         .defaultActions(Collections.singletonList(ListenerDefaultActionArgs.builder()
                                                 .type("forward")
                                                 .targetGroupArn(targetGroup.arn())
